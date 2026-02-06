@@ -1,7 +1,8 @@
-// ══════════════════════════════════════════════════════
-//  UNIVERSAL VIDEO LINK EXTRACTOR — v2
-//  Supports 20+ players, API for Android, HTTPS-ready
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+//  UNIVERSAL VIDEO LINK EXTRACTOR v2.1
+//  With Proxy Streaming for Koyeb Deployment
+//  Port: 8000 (Koyeb requirement)
+// ══════════════════════════════════════════════════════════════
 
 const http = require('http');
 const https = require('https');
@@ -9,11 +10,12 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const zlib = require('zlib');
+const axios = require('axios');
 
 const PORT = process.env.PORT || 8000;
 
 // ══════════════════════════════════════
-// ROBUST FETCHER
+// ROBUST FETCHER (for scraping)
 // ══════════════════════════════════════
 function fetchURL(targetURL, opts = {}, depth = 0) {
   return new Promise((resolve, reject) => {
@@ -47,7 +49,6 @@ function fetchURL(targetURL, opts = {}, depth = 0) {
     }, (res) => {
       const setCookies = (res.headers['set-cookie'] || [])
         .map(c => c.split(';')[0]).join('; ');
-
       const allCookies = [opts.cookies, setCookies].filter(Boolean).join('; ');
 
       if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
@@ -60,11 +61,8 @@ function fetchURL(targetURL, opts = {}, depth = 0) {
       const encoding = res.headers['content-encoding'];
       let stream = res;
 
-      if (encoding === 'gzip') {
-        stream = res.pipe(zlib.createGunzip());
-      } else if (encoding === 'deflate') {
-        stream = res.pipe(zlib.createInflate());
-      }
+      if (encoding === 'gzip') stream = res.pipe(zlib.createGunzip());
+      else if (encoding === 'deflate') stream = res.pipe(zlib.createInflate());
 
       stream.on('data', c => chunks.push(c));
       stream.on('end', () => {
@@ -83,16 +81,11 @@ function fetchURL(targetURL, opts = {}, depth = 0) {
 
     request.on('error', reject);
     request.setTimeout(25000, () => { request.destroy(); reject(new Error('Timeout')); });
-
-    if (opts.postData) {
-      request.write(opts.postData);
-    }
-
+    if (opts.postData) request.write(opts.postData);
     request.end();
   });
 }
 
-// Helper: POST request
 function postURL(url, data, opts = {}) {
   const postData = typeof data === 'string' ? data : JSON.stringify(data);
   return fetchURL(url, {
@@ -110,7 +103,7 @@ function postURL(url, data, opts = {}) {
 }
 
 // ══════════════════════════════════════
-// JS UNPACKER (eval/packed)
+// JS UNPACKER
 // ══════════════════════════════════════
 function baseEncode(num, base) {
   const CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -186,7 +179,6 @@ function findAndUnpackAll(html) {
     }
     idx++;
   }
-
   return results;
 }
 
@@ -197,19 +189,17 @@ const PLAYER_HANDLERS = {
 
   // ── VK Player ──
   vk: {
-    match: (url) => /vk\.com|vkvideo/i.test(url),
+    match: (url) => /vk\.com|vkvideo|vk\.cc/i.test(url),
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [VK] Extracting...');
 
-      // Method 1: Direct quality URLs in page JSON
       const qualities = ['2160', '1440', '1080', '720', '480', '360', '240', '144'];
+
       for (const q of qualities) {
-        // Pattern: "url720":"https://..."
         const patterns = [
           new RegExp(`"url${q}"\\s*:\\s*"([^"]+)"`, 'i'),
           new RegExp(`url${q}\\s*=\\s*"([^"]+)"`, 'i'),
-          new RegExp(`"url${q}"\\s*:\\s*"([^"]+)"`, 'gi'),
         ];
         for (const pat of patterns) {
           const m = html.match(pat);
@@ -220,128 +210,67 @@ const PLAYER_HANDLERS = {
         }
       }
 
-      // Method 2: player.params JSON
       const paramsMatch = html.match(/var\s+playerParams\s*=\s*(\{[\s\S]*?\});/i)
-        || html.match(/"params"\s*:\s*\[(\{[\s\S]*?\})\]/i)
-        || html.match(/ajax\.preload\s*\(\s*"[^"]*"\s*,\s*(\{[\s\S]*?\})\s*\)/i);
-
+        || html.match(/"params"\s*:\s*\[(\{[\s\S]*?\})\]/i);
       if (paramsMatch) {
         try {
           const params = JSON.parse(paramsMatch[1]);
           for (const q of qualities) {
-            const key = `url${q}`;
-            if (params[key]) {
-              sources.push({ url: params[key], quality: q + 'p', type: 'video/mp4', player: 'VK' });
+            if (params[`url${q}`]) {
+              sources.push({ url: params[`url${q}`], quality: q + 'p', type: 'video/mp4', player: 'VK' });
             }
           }
-          if (params.hls) {
-            sources.push({ url: params.hls, quality: 'HLS Master', type: 'application/x-mpegURL', player: 'VK' });
-          }
-          if (params.dash_webm) {
-            sources.push({ url: params.dash_webm, quality: 'DASH', type: 'application/dash+xml', player: 'VK' });
-          }
+          if (params.hls) sources.push({ url: params.hls, quality: 'HLS Master', type: 'application/x-mpegURL', player: 'VK' });
         } catch {}
       }
 
-      // Method 3: HLS manifest
-      const hlsMatch = html.match(/"hls"\s*:\s*"([^"]+)"/i)
-        || html.match(/hls_host.*?["']([^"']+\.m3u8[^"']*?)["']/i);
+      const hlsMatch = html.match(/"hls"\s*:\s*"([^"]+)"/i);
       if (hlsMatch) {
-        sources.push({
-          url: hlsMatch[1].replace(/\\\//g, '/'),
-          quality: 'HLS Master',
-          type: 'application/x-mpegURL',
-          player: 'VK'
-        });
+        sources.push({ url: hlsMatch[1].replace(/\\\//g, '/'), quality: 'HLS Master', type: 'application/x-mpegURL', player: 'VK' });
       }
 
-      // Method 4: OG video meta
-      const ogVideo = html.match(/property="og:video"\s+content="([^"]+)"/i)
-        || html.match(/property="og:video:url"\s+content="([^"]+)"/i);
-      if (ogVideo) {
-        sources.push({ url: ogVideo[1], quality: 'OG', type: 'video/mp4', player: 'VK' });
-      }
+      const ogVideo = html.match(/property="og:video(?::url)?"\s+content="([^"]+)"/i);
+      if (ogVideo) sources.push({ url: ogVideo[1], quality: 'OG', type: 'video/mp4', player: 'VK' });
 
       return sources;
     }
   },
 
-  // ── OK.ru (Odnoklassniki) ──
+  // ── OK.ru ──
   okru: {
     match: (url) => /ok\.ru|odnoklassniki/i.test(url),
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [OK.ru] Extracting...');
 
-      // Method 1: data-options JSON
       const dataOpts = html.match(/data-options="([^"]*)"/i)
         || html.match(/data-options='([^']*)'/i);
-
       if (dataOpts) {
         try {
           const decoded = dataOpts[1]
-            .replace(/&quot;/g, '"')
-            .replace(/&amp;/g, '&')
-            .replace(/&#39;/g, "'")
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>');
-
+            .replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+            .replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
           const opts = JSON.parse(decoded);
           const metadata = opts.flashvars?.metadata;
           if (metadata) {
             const meta = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
             if (meta.videos) {
               meta.videos.forEach(v => {
-                sources.push({
-                  url: v.url,
-                  quality: v.name || 'Unknown',
-                  type: 'video/mp4',
-                  player: 'OK.ru'
-                });
+                sources.push({ url: v.url, quality: v.name || 'Unknown', type: 'video/mp4', player: 'OK.ru' });
               });
             }
             if (meta.hlsManifestUrl) {
-              sources.push({
-                url: meta.hlsManifestUrl,
-                quality: 'HLS Master',
-                type: 'application/x-mpegURL',
-                player: 'OK.ru'
-              });
-            }
-            if (meta.dashManifestUrl) {
-              sources.push({
-                url: meta.dashManifestUrl,
-                quality: 'DASH',
-                type: 'application/dash+xml',
-                player: 'OK.ru'
-              });
+              sources.push({ url: meta.hlsManifestUrl, quality: 'HLS Master', type: 'application/x-mpegURL', player: 'OK.ru' });
             }
           }
         } catch (e) {
-          console.log(`    [OK.ru] data-options parse error: ${e.message}`);
+          console.log(`    [OK.ru] parse error: ${e.message}`);
         }
       }
 
-      // Method 2: flashvars
-      const fvMatch = html.match(/flashvars['"]\s*:\s*\{([\s\S]*?)\}/i);
-      if (fvMatch) {
-        const metaMatch = fvMatch[1].match(/metadata['"]\s*:\s*['"]([\s\S]*?)['"]/i);
-        if (metaMatch) {
-          try {
-            const meta = JSON.parse(metaMatch[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
-            if (meta.videos) {
-              meta.videos.forEach(v => {
-                sources.push({ url: v.url, quality: v.name, type: 'video/mp4', player: 'OK.ru' });
-              });
-            }
-          } catch {}
-        }
-      }
-
-      // Method 3: Direct video URL patterns
       const okPatterns = [
         /["'](https?:\/\/(?:vd\d*|v\d*)\.mycdn\.me[^"']+)["']/gi,
-        /["'](https?:\/\/(?:.*?)\.mycdn\.me\/video[^"']+)["']/gi,
+        /["'](https?:\/\/[^"']*?\.mycdn\.me\/video[^"']+)["']/gi,
       ];
       for (const pat of okPatterns) {
         let m;
@@ -356,7 +285,7 @@ const PLAYER_HANDLERS = {
 
   // ── Sibnet ──
   sibnet: {
-    match: (url) => /sibnet\.(ru|com)/i.test(url),
+    match: (url) => /sibnet/i.test(url),
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [Sibnet] Extracting...');
@@ -372,23 +301,19 @@ const PLAYER_HANDLERS = {
         let m;
         while ((m = pat.exec(html)) !== null) {
           let vurl = m[1];
-          if (vurl.startsWith('/')) {
-            vurl = `https://video.sibnet.ru${vurl}`;
-          }
+          if (vurl.startsWith('/')) vurl = `https://video.sibnet.ru${vurl}`;
           sources.push({ url: vurl, quality: 'Default', type: 'video/mp4', player: 'Sibnet' });
         }
       }
-
       return sources;
     }
   },
 
-  // ── StreamWish / FileLions / AZCDNs ──
+  // ── StreamWish / FileLions ──
   streamwish: {
-    match: (url) => /streamwish|filelions|azcdn|asnow|dwish|kswplayer|playerwish|sfastwish|obeywish/i.test(url),
+    match: (url) => /streamwish|filelions|azcdn|dwish|playerwish|sfastwish|obeywish/i.test(url),
     async extract(url, html, referer) {
-      console.log('    [StreamWish] Extracting...');
-      // Relies heavily on packed JS — handled by generic + unpack
+      console.log('    [StreamWish] Extracting via unpack...');
       return [];
     }
   },
@@ -399,14 +324,9 @@ const PLAYER_HANDLERS = {
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [Mp4Upload] Extracting...');
-
-      // Pattern: player.src("URL")
       const m = html.match(/player\.src\s*\(\s*["']([^"']+)["']\s*\)/i)
         || html.match(/src\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i);
-      if (m) {
-        sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'Mp4Upload' });
-      }
-
+      if (m) sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'Mp4Upload' });
       return sources;
     }
   },
@@ -417,60 +337,51 @@ const PLAYER_HANDLERS = {
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [Uqload] Extracting...');
-
       const patterns = [
         /sources\s*:\s*\["([^"]+)"\]/i,
         /src\s*:\s*["'](https?:\/\/[^"']+\.mp4[^"']*)["']/i,
         /video_link\s*=\s*["']([^"']+)["']/i,
       ];
-
       for (const pat of patterns) {
         const m = html.match(pat);
         if (m) sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'Uqload' });
       }
-
       return sources;
     }
   },
 
-  // ── VidBom / VidBam ──
+  // ── VidBom ──
   vidbom: {
     match: (url) => /vidbom|vidbam|vadbam|vidbm/i.test(url),
     async extract(url, html, referer) {
-      console.log('    [VidBom] Extracting via packed JS...');
-      return []; // Generic handler + unpack will get these
+      console.log('    [VidBom] Extracting via unpack...');
+      return [];
     }
   },
 
   // ── DoodStream ──
   dood: {
-    match: (url) => /dood|d0o0d|doo0d|ds2play|doods/i.test(url),
+    match: (url) => /dood|d0o0d|ds2play|doods/i.test(url),
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [DoodStream] Extracting...');
-
-      // DoodStream uses a pass_md5 token + random string
       const passMatch = html.match(/\/pass_md5\/([^'"]+)/i);
       if (passMatch) {
         try {
           const passURL = new URL(passMatch[0], url).href;
-          console.log(`    [Dood] Fetching token: ${passURL}`);
           const tokenResp = await fetchURL(passURL, { referer: url });
           const token = tokenResp.text.trim();
-
           if (token && token.startsWith('http')) {
-            // Append random string + expiry
             const rand = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-            let randStr = '';
-            for (let i = 0; i < 10; i++) randStr += rand[Math.floor(Math.random() * rand.length)];
-            const finalURL = `${token}${randStr}?token=${passMatch[1]}&expiry=${Date.now()}`;
+            let rs = '';
+            for (let i = 0; i < 10; i++) rs += rand[Math.floor(Math.random() * rand.length)];
+            const finalURL = `${token}${rs}?token=${passMatch[1]}&expiry=${Date.now()}`;
             sources.push({ url: finalURL, quality: 'Default', type: 'video/mp4', player: 'DoodStream' });
           }
         } catch (e) {
-          console.log(`    [Dood] Token fetch failed: ${e.message}`);
+          console.log(`    [Dood] Token failed: ${e.message}`);
         }
       }
-
       return sources;
     }
   },
@@ -482,15 +393,12 @@ const PLAYER_HANDLERS = {
       const sources = [];
       console.log('    [StreamTape] Extracting...');
 
-      // StreamTape constructs URL from two parts
       const innerMatch = html.match(/id="(?:robotlink|nomark)"[^>]*>([^<]*)<\/div>/i);
-      const tokenMatch = html.match(/innerHTML\s*=\s*['"][^'"]*['"]\s*\+\s*\('([^']+)'\)\.substring/i)
-        || html.match(/innerHTML\s*=\s*"[^"]*"\s*\+\s*\('([^']+)'\)/i);
+      const tokenMatch = html.match(/innerHTML\s*=\s*['"][^'"]*['"]\s*\+\s*\('([^']+)'\)\.substring/i);
 
       if (innerMatch && tokenMatch) {
         const part1 = innerMatch[1].trim();
         const part2 = tokenMatch[1];
-        // The substring offset varies — try common ones
         for (const offset of [3, 4, 5, 2]) {
           const token = part2.substring(offset);
           const finalURL = `https:${part1}${token}`;
@@ -501,8 +409,7 @@ const PLAYER_HANDLERS = {
         }
       }
 
-      // Alternative pattern
-      const altMatch = html.match(/document\.getElementById\('(?:robotlink|nomark)'\)\.innerHTML\s*=\s*["']([^"']+)["']\s*\+\s*\('([^']+)'\)\.substring\((\d+)\)/i);
+      const altMatch = html.match(/getElementById\('(?:robotlink|nomark)'\)\.innerHTML\s*=\s*["']([^"']+)["']\s*\+\s*\('([^']+)'\)\.substring\((\d+)\)/i);
       if (altMatch) {
         const finalURL = `https:${altMatch[1]}${altMatch[2].substring(parseInt(altMatch[3]))}`;
         sources.push({ url: finalURL, quality: 'Default', type: 'video/mp4', player: 'StreamTape' });
@@ -512,23 +419,12 @@ const PLAYER_HANDLERS = {
     }
   },
 
-  // ── GoVideo / Govid ──
-  govideo: {
-    match: (url) => /govideo|govid/i.test(url),
-    async extract(url, html, referer) {
-      console.log('    [GoVideo] Extracting...');
-      return [];
-    }
-  },
-
   // ── MixDrop ──
   mixdrop: {
     match: (url) => /mixdrop/i.test(url),
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [MixDrop] Extracting...');
-
-      // MixDrop uses packed JS — after unpacking look for MDCore.wurl
       const unpacked = findAndUnpackAll(html);
       for (const code of unpacked) {
         const m = code.match(/MDCore\.wurl\s*=\s*"([^"]+)"/i)
@@ -539,7 +435,6 @@ const PLAYER_HANDLERS = {
           sources.push({ url: vurl, quality: 'Default', type: 'video/mp4', player: 'MixDrop' });
         }
       }
-
       return sources;
     }
   },
@@ -553,85 +448,20 @@ const PLAYER_HANDLERS = {
     }
   },
 
-  // ── Upstream ──
-  upstream: {
-    match: (url) => /upstream/i.test(url),
-    async extract(url, html, referer) {
-      console.log('    [Upstream] Extracting...');
-      return [];
-    }
-  },
-
-  // ── SendVid ──
-  sendvid: {
-    match: (url) => /sendvid/i.test(url),
-    async extract(url, html, referer) {
-      const sources = [];
-      console.log('    [SendVid] Extracting...');
-
-      const m = html.match(/source\s+src="([^"]+)"\s+type="video/i)
-        || html.match(/var\s+video_source\s*=\s*["']([^"']+)["']/i);
-      if (m) {
-        sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'SendVid' });
-      }
-
-      return sources;
-    }
-  },
-
-  // ── Myvi ──
-  myvi: {
-    match: (url) => /myvi\.(ru|tv|top)/i.test(url),
-    async extract(url, html, referer) {
-      const sources = [];
-      console.log('    [Myvi] Extracting...');
-
-      // Myvi uses a playerSettings JSON
-      const settingsMatch = html.match(/playerSettings\s*=\s*(\{[\s\S]*?\});/i)
-        || html.match(/CreatePlayer\s*\(\s*(\{[\s\S]*?\})\s*\)/i);
-
-      if (settingsMatch) {
-        try {
-          const settings = JSON.parse(settingsMatch[1]);
-          if (settings.source) {
-            sources.push({ url: settings.source, quality: 'Default', type: 'video/mp4', player: 'Myvi' });
-          }
-          if (settings.hlsSource) {
-            sources.push({ url: settings.hlsSource, quality: 'HLS', type: 'application/x-mpegURL', player: 'Myvi' });
-          }
-        } catch {}
-      }
-
-      // Direct patterns
-      const hlsMatch = html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
-      if (hlsMatch) {
-        sources.push({ url: hlsMatch[1], quality: 'HLS', type: 'application/x-mpegURL', player: 'Myvi' });
-      }
-
-      return sources;
-    }
-  },
-
-  // ── MegaMax / Mega ──
+  // ── MegaMax ──
   megamax: {
     match: (url) => /megamax|mega\./i.test(url),
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [MegaMax] Extracting...');
-
-      // Usually uses packed JS or standard sources array
       const unpacked = findAndUnpackAll(html);
       const allCode = [html, ...unpacked].join('\n');
-
-      // Look for file/source patterns
       const patterns = [
         /file\s*:\s*["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/gi,
         /src\s*:\s*["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/gi,
-        /source\s*:\s*["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/gi,
         /["'](https?:\/\/[^"'\s]+?\.mp4[^"'\s]*?)["']/gi,
         /["'](https?:\/\/[^"'\s]+?\.m3u8[^"'\s]*?)["']/gi,
       ];
-
       for (const pat of patterns) {
         let m;
         while ((m = pat.exec(allCode)) !== null) {
@@ -646,7 +476,6 @@ const PLAYER_HANDLERS = {
           }
         }
       }
-
       return sources;
     }
   },
@@ -657,8 +486,6 @@ const PLAYER_HANDLERS = {
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [Dailymotion] Extracting...');
-
-      // Get video metadata JSON
       const configMatch = html.match(/"qualities"\s*:\s*(\{[\s\S]*?\})\s*,\s*"/i);
       if (configMatch) {
         try {
@@ -666,20 +493,12 @@ const PLAYER_HANDLERS = {
           for (const [q, vlist] of Object.entries(qualities)) {
             if (Array.isArray(vlist)) {
               vlist.forEach(v => {
-                if (v.url) {
-                  sources.push({
-                    url: v.url,
-                    quality: q + 'p',
-                    type: v.type || 'video/mp4',
-                    player: 'Dailymotion'
-                  });
-                }
+                if (v.url) sources.push({ url: v.url, quality: q + 'p', type: v.type || 'video/mp4', player: 'Dailymotion' });
               });
             }
           }
         } catch {}
       }
-
       return sources;
     }
   },
@@ -690,17 +509,8 @@ const PLAYER_HANDLERS = {
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [Vidmoly] Extracting...');
-
       const m = html.match(/sources\s*:\s*\[\s*\{[^}]*file\s*:\s*["']([^"']+)["']/i);
-      if (m) {
-        sources.push({
-          url: m[1],
-          quality: 'HLS',
-          type: 'application/x-mpegURL',
-          player: 'Vidmoly'
-        });
-      }
-
+      if (m) sources.push({ url: m[1], quality: 'HLS', type: 'application/x-mpegURL', player: 'Vidmoly' });
       return sources;
     }
   },
@@ -711,41 +521,50 @@ const PLAYER_HANDLERS = {
     async extract(url, html, referer) {
       const sources = [];
       console.log('    [YourUpload] Extracting...');
-
       const m = html.match(/file\s*:\s*'([^']+)'/i) || html.match(/src\s*:\s*'([^']+\.mp4[^']*)'/i);
-      if (m) {
-        sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'YourUpload' });
-      }
-
+      if (m) sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'YourUpload' });
       return sources;
     }
   },
 
-  // ── VidHide / VidhidePlayer ──
+  // ── SendVid ──
+  sendvid: {
+    match: (url) => /sendvid/i.test(url),
+    async extract(url, html, referer) {
+      const sources = [];
+      console.log('    [SendVid] Extracting...');
+      const m = html.match(/source\s+src="([^"]+)"\s+type="video/i);
+      if (m) sources.push({ url: m[1], quality: 'Default', type: 'video/mp4', player: 'SendVid' });
+      return sources;
+    }
+  },
+
+  // ── Myvi ──
+  myvi: {
+    match: (url) => /myvi\.(ru|tv|top)/i.test(url),
+    async extract(url, html, referer) {
+      const sources = [];
+      console.log('    [Myvi] Extracting...');
+      const settingsMatch = html.match(/playerSettings\s*=\s*(\{[\s\S]*?\});/i);
+      if (settingsMatch) {
+        try {
+          const settings = JSON.parse(settingsMatch[1]);
+          if (settings.source) sources.push({ url: settings.source, quality: 'Default', type: 'video/mp4', player: 'Myvi' });
+          if (settings.hlsSource) sources.push({ url: settings.hlsSource, quality: 'HLS', type: 'application/x-mpegURL', player: 'Myvi' });
+        } catch {}
+      }
+      const hlsMatch = html.match(/["'](https?:\/\/[^"']+\.m3u8[^"']*)["']/i);
+      if (hlsMatch) sources.push({ url: hlsMatch[1], quality: 'HLS', type: 'application/x-mpegURL', player: 'Myvi' });
+      return sources;
+    }
+  },
+
+  // ── VidHide ──
   vidhide: {
-    match: (url) => /vidhide|vid\.hide/i.test(url),
+    match: (url) => /vidhide/i.test(url),
     async extract(url, html, referer) {
       console.log('    [VidHide] Extracting...');
       return [];
-    }
-  },
-
-  // ── Generic JWPlayer ──
-  jwplayer: {
-    match: (url) => false, // Only triggered as fallback
-    async extract(url, html, referer) {
-      const sources = [];
-      const m = html.match(/jwplayer\s*\(\s*["'][^"']+["']\s*\)\s*\.\s*setup\s*\(\s*(\{[\s\S]*?\})\s*\)/i);
-      if (m) {
-        try {
-          // Extract file from setup config
-          const fileMatch = m[1].match(/file\s*:\s*["']([^"']+)["']/i);
-          if (fileMatch) {
-            sources.push({ url: fileMatch[1], quality: 'Default', type: 'video/mp4', player: 'JWPlayer' });
-          }
-        } catch {}
-      }
-      return sources;
     }
   },
 };
@@ -760,22 +579,16 @@ function genericExtract(html, allCode) {
   function add(url, label, type, player = 'Generic') {
     if (!url || seen.has(url)) return;
     url = url.trim().replace(/\\/g, '');
-    if (url.length < 10) return;
-    if (!/^https?:\/\//i.test(url)) return;
+    if (url.length < 10 || !/^https?:\/\//i.test(url)) return;
     if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|ttf|php|html?)(\?|$)/i.test(url)
         && !/\.mp4|\.m3u8|\.webm|\.ts|\.mkv|\.flv/i.test(url)) return;
-
     seen.add(url);
-    sources.push({
-      url,
-      quality: label || detectQuality(url),
-      type: type || detectType(url),
-      player,
-    });
+    sources.push({ url, quality: label || detectQuality(url), type: type || detectType(url), player });
   }
 
-  // <source> tags
   let m;
+
+  // <source> tags
   const sourceRE = /<source[^>]+src=["']([^"']+)["'][^>]*>/gi;
   while ((m = sourceRE.exec(allCode)) !== null) {
     const label = (m[0].match(/label=["']([^"']+)/i) || [])[1] || '';
@@ -784,12 +597,12 @@ function genericExtract(html, allCode) {
   }
 
   // <video src>
-  const videoSrcRE = /<video[^>]+src=["']([^"']+)/gi;
-  while ((m = videoSrcRE.exec(allCode)) !== null) add(m[1], '', '');
+  const vidRE = /<video[^>]+src=["']([^"']+)/gi;
+  while ((m = vidRE.exec(allCode)) !== null) add(m[1], '', '');
 
   // sources arrays
-  const srcArrayRE = /sources\s*[:=]\s*\[([\s\S]*?)\]/gi;
-  while ((m = srcArrayRE.exec(allCode)) !== null) {
+  const arrRE = /sources\s*[:=]\s*\[([\s\S]*?)\]/gi;
+  while ((m = arrRE.exec(allCode)) !== null) {
     const objRE = /\{[^}]*?(?:file|src|source|url)\s*[:=]\s*["']([^"']+)["'][^}]*?\}/gi;
     let obj;
     while ((obj = objRE.exec(m[1])) !== null) {
@@ -799,21 +612,19 @@ function genericExtract(html, allCode) {
     }
   }
 
-  // Direct assignments
+  // Assignments
   const assignPats = [
     /(?:file|source|src|video_?url|videoUrl|stream_?url|mp4_?url)\s*[:=]\s*["']([^"']+?\.(?:mp4|m3u8|webm|mkv|flv)[^"']*?)["']/gi,
     /(?:file|source|src|video_?url|videoUrl|stream_?url)\s*[:=]\s*["'](https?:\/\/[^"']+?)["']/gi,
     /player\.src\s*\(\s*["']([^"']+)["']/gi,
-    /player\.src\s*\(\s*\{[^}]*?src\s*:\s*["']([^"']+)["']/gi,
     /\.setup\s*\(\s*\{[\s\S]*?file\s*:\s*["']([^"']+)["']/gi,
     /data-src=["']([^"']+\.(?:mp4|m3u8)[^"']*?)["']/gi,
   ];
-
   for (const pat of assignPats) {
     while ((m = pat.exec(allCode)) !== null) add(m[1], '', '');
   }
 
-  // Standalone video URLs
+  // Standalone URLs
   const urlPats = [
     /["'](https?:\/\/[^"'\s]+?\.m3u8[^"'\s]*?)["']/gi,
     /["'](https?:\/\/[^"'\s]+?\.mp4[^"'\s]*?)["']/gi,
@@ -823,7 +634,7 @@ function genericExtract(html, allCode) {
     while ((m = pat.exec(allCode)) !== null) add(m[1], '', '');
   }
 
-  // Base64 encoded
+  // Base64
   const b64RE = /atob\s*\(\s*["']([A-Za-z0-9+/=]{20,})["']\s*\)/gi;
   while ((m = b64RE.exec(allCode)) !== null) {
     try {
@@ -842,7 +653,6 @@ function detectQuality(url) {
   if (/\.m3u8/i.test(url)) return 'HLS';
   if (/high|hd|1080/i.test(url)) return 'HD';
   if (/med|sd|480/i.test(url)) return 'SD';
-  if (/low|360/i.test(url)) return 'Low';
   return 'Default';
 }
 
@@ -850,9 +660,7 @@ function detectType(url) {
   if (/\.m3u8/i.test(url)) return 'application/x-mpegURL';
   if (/\.mp4/i.test(url)) return 'video/mp4';
   if (/\.webm/i.test(url)) return 'video/webm';
-  if (/\.mkv/i.test(url)) return 'video/x-matroska';
   if (/\.ts/i.test(url)) return 'video/mp2t';
-  if (/\.flv/i.test(url)) return 'video/x-flv';
   return 'video/mp4';
 }
 
@@ -868,12 +676,10 @@ function parseM3U8(content, baseURL) {
       const bw = (lines[i].match(/BANDWIDTH=(\d+)/i) || [])[1];
       const res = (lines[i].match(/RESOLUTION=(\d+x\d+)/i) || [])[1];
       const name = (lines[i].match(/NAME="([^"]+)"/i) || [])[1];
-
       let urlLine = '';
       for (let j = i + 1; j < lines.length; j++) {
         if (!lines[j].startsWith('#')) { urlLine = lines[j]; break; }
       }
-
       if (urlLine) {
         let fullURL = urlLine;
         if (!/^https?:\/\//i.test(urlLine)) {
@@ -889,7 +695,6 @@ function parseM3U8(content, baseURL) {
       }
     }
   }
-
   return variants;
 }
 
@@ -901,12 +706,10 @@ async function extractPipeline(url, referer) {
   console.log(`  EXTRACTING: ${url}`);
   console.log(`${'═'.repeat(60)}`);
 
-  // Step 1: Fetch page
   console.log('  [1] Fetching page...');
   const page = await fetchURL(url, { referer });
   console.log(`  [1] Got ${page.text.length} bytes (status ${page.status})`);
 
-  // Detect player
   let detectedPlayer = 'Unknown';
   for (const [name, handler] of Object.entries(PLAYER_HANDLERS)) {
     if (handler.match(url) || handler.match(page.finalURL)) {
@@ -916,40 +719,34 @@ async function extractPipeline(url, referer) {
   }
   console.log(`  [2] Detected player: ${detectedPlayer}`);
 
-  // Step 2: Unpack JS
-  console.log('  [3] Unpacking obfuscated JS...');
+  console.log('  [3] Unpacking JS...');
   const unpacked = findAndUnpackAll(page.text);
   const allCode = [page.text, ...unpacked].join('\n===SEP===\n');
 
-  // Step 3: Player-specific extraction
   let sources = [];
 
   if (detectedPlayer !== 'Unknown') {
     console.log(`  [4] Running ${detectedPlayer} handler...`);
     const handler = PLAYER_HANDLERS[detectedPlayer];
-    const playerSources = await handler.extract(url, allCode, referer);
-    sources.push(...playerSources);
-    console.log(`  [4] Player handler found ${playerSources.length} source(s)`);
+    const ps = await handler.extract(url, allCode, referer);
+    sources.push(...ps);
+    console.log(`  [4] Player handler: ${ps.length} source(s)`);
   }
 
-  // Step 4: Generic extraction (always run)
-  console.log('  [5] Running generic extraction...');
-  const genericSources = genericExtract(page.text, allCode);
-  console.log(`  [5] Generic found ${genericSources.length} source(s)`);
+  console.log('  [5] Generic extraction...');
+  const gs = genericExtract(page.text, allCode);
+  console.log(`  [5] Generic: ${gs.length} source(s)`);
 
-  // Merge (avoid duplicates)
   const seenURLs = new Set(sources.map(s => s.url));
-  for (const src of genericSources) {
-    if (!seenURLs.has(src.url)) {
-      seenURLs.add(src.url);
-      sources.push(src);
-    }
+  for (const src of gs) {
+    if (!seenURLs.has(src.url)) { seenURLs.add(src.url); sources.push(src); }
   }
 
-  // Step 5: Follow iframes (recursive)
-  console.log('  [6] Checking for inner iframes...');
-  const iframes = [];
+  // Follow iframes
+  console.log('  [6] Checking iframes...');
   const iframeRE = /<iframe[^>]+src=["']([^"']+)["']/gi;
+  const iframes = [];
+  let m;
   while ((m = iframeRE.exec(page.text)) !== null) {
     let iframeURL = m[1];
     if (iframeURL.startsWith('//')) iframeURL = 'https:' + iframeURL;
@@ -962,38 +759,32 @@ async function extractPipeline(url, referer) {
   }
 
   if (iframes.length > 0) {
-    console.log(`  [6] Found ${iframes.length} iframe(s), extracting...`);
+    console.log(`  [6] Found ${iframes.length} iframe(s)`);
     for (const iframeURL of iframes.slice(0, 5)) {
       try {
-        console.log(`    ↪ Iframe: ${iframeURL}`);
-        const iframePage = await fetchURL(iframeURL, { referer: url });
-        const iframeUnpacked = findAndUnpackAll(iframePage.text);
-        const iframeAllCode = [iframePage.text, ...iframeUnpacked].join('\n');
+        console.log(`    ↪ ${iframeURL}`);
+        const iPage = await fetchURL(iframeURL, { referer: url });
+        const iUnpacked = findAndUnpackAll(iPage.text);
+        const iAllCode = [iPage.text, ...iUnpacked].join('\n');
 
-        // Run player-specific for iframe
         for (const [name, handler] of Object.entries(PLAYER_HANDLERS)) {
           if (handler.match(iframeURL)) {
-            const ps = await handler.extract(iframeURL, iframeAllCode, url);
-            ps.forEach(s => {
-              if (!seenURLs.has(s.url)) { seenURLs.add(s.url); sources.push(s); }
-            });
+            const ps = await handler.extract(iframeURL, iAllCode, url);
+            ps.forEach(s => { if (!seenURLs.has(s.url)) { seenURLs.add(s.url); sources.push(s); } });
             break;
           }
         }
 
-        // Generic for iframe
-        const gs = genericExtract(iframePage.text, iframeAllCode);
-        gs.forEach(s => {
-          if (!seenURLs.has(s.url)) { seenURLs.add(s.url); sources.push(s); }
-        });
+        const igs = genericExtract(iPage.text, iAllCode);
+        igs.forEach(s => { if (!seenURLs.has(s.url)) { seenURLs.add(s.url); sources.push(s); } });
       } catch (e) {
         console.log(`    ✗ Iframe failed: ${e.message}`);
       }
     }
   }
 
-  // Step 6: Parse m3u8 master playlists
-  console.log('  [7] Parsing m3u8 playlists...');
+  // Parse m3u8
+  console.log('  [7] Parsing m3u8...');
   const expanded = [];
   for (const src of sources) {
     if (/\.m3u8/i.test(src.url) && !src.needsToken) {
@@ -1001,7 +792,7 @@ async function extractPipeline(url, referer) {
         const m3u8 = await fetchURL(src.url, { referer: url });
         const variants = parseM3U8(m3u8.text, src.url);
         if (variants.length > 0) {
-          console.log(`    → ${variants.length} variants from m3u8`);
+          console.log(`    → ${variants.length} variants`);
           variants.forEach(v => {
             v.player = src.player || 'HLS';
             if (!seenURLs.has(v.url)) { seenURLs.add(v.url); expanded.push(v); }
@@ -1014,7 +805,6 @@ async function extractPipeline(url, referer) {
     expanded.push(src);
   }
 
-  // Sort by quality
   expanded.sort((a, b) => {
     const qa = parseInt(a.quality) || 0;
     const qb = parseInt(b.quality) || 0;
@@ -1037,16 +827,245 @@ async function extractPipeline(url, referer) {
   };
 }
 
-// ══════════════════════════════════════
-// HTTP SERVER
-// ══════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+//  ██████  PROXY ROUTE (NEW — Axios Streaming)  ██████
+//
+//  Handles:
+//  • MP4/WebM direct streaming with piping
+//  • HLS m3u8 rewriting (rewrites segment URLs)
+//  • Range requests (seeking in video)
+//  • Custom Referer per player (VK, OK.ru, etc.)
+//  • Infinite timeout for long streams on Koyeb
+//  • Robust error handling (no server crashes)
+// ═══════════════════════════════════════════════════════════
+
+// Map of player domains → required Referer
+const REFERER_MAP = {
+  'ok.ru':            'https://ok.ru/',
+  'mycdn.me':         'https://ok.ru/',
+  'odnoklassniki':    'https://ok.ru/',
+  'vk.com':           'https://vk.com/',
+  'vkuservideo':      'https://vk.com/',
+  'vk-cdn':           'https://vk.com/',
+  'sibnet.ru':        'https://video.sibnet.ru/',
+  'streamtape':       'https://streamtape.com/',
+  'dood':             'https://dood.to/',
+  'mixdrop':          'https://mixdrop.co/',
+  'mp4upload':        'https://mp4upload.com/',
+  'uqload':           'https://uqload.co/',
+  'dailymotion':      'https://www.dailymotion.com/',
+  'filemoon':         'https://filemoon.sx/',
+  'streamwish':       'https://streamwish.to/',
+  'filelions':        'https://filelions.to/',
+  'vidmoly':          'https://vidmoly.to/',
+  'megamax':          'https://megamax.me/',
+  'yourupload':       'https://www.yourupload.com/',
+};
+
+function getRefererForURL(videoURL, fallbackReferer) {
+  const lower = videoURL.toLowerCase();
+  for (const [domain, ref] of Object.entries(REFERER_MAP)) {
+    if (lower.includes(domain)) return ref;
+  }
+  // If user provided a custom referer, use it
+  if (fallbackReferer) return fallbackReferer;
+  // Otherwise use the video URL's own origin
+  try { return new URL(videoURL).origin + '/'; } catch { return ''; }
+}
+
+async function handleProxy(req, res) {
+  // ── Disable timeout for streaming (Koyeb fix) ──
+  req.setTimeout(0);
+  res.setTimeout(0);
+
+  const parsed = new URL(req.url, `http://localhost:${PORT}`);
+  const targetURL = parsed.searchParams.get('url');
+  const customReferer = parsed.searchParams.get('referer') || '';
+
+  if (!targetURL) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Missing "url" query parameter' }));
+    return;
+  }
+
+  // Validate URL
+  let targetParsed;
+  try {
+    targetParsed = new URL(targetURL);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid URL' }));
+    return;
+  }
+
+  const referer = getRefererForURL(targetURL, customReferer);
+
+  console.log(`[PROXY] ${targetURL.substring(0, 120)}`);
+  console.log(`  Referer: ${referer}`);
+
+  try {
+    // ── Build request headers ──
+    const reqHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      'Referer': referer,
+      'Origin': (() => { try { return new URL(referer).origin; } catch { return targetParsed.origin; } })(),
+      'Accept': '*/*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Connection': 'keep-alive',
+    };
+
+    // ── Forward Range header for seeking ──
+    if (req.headers.range) {
+      reqHeaders['Range'] = req.headers.range;
+      console.log(`  Range: ${req.headers.range}`);
+    }
+
+    // ── Check if this is an m3u8 playlist ──
+    const isM3U8 = /\.m3u8/i.test(targetURL);
+
+    if (isM3U8) {
+      // ── HLS Playlist: Fetch, rewrite URLs, return ──
+      console.log('  [M3U8] Rewriting playlist...');
+
+      const response = await axios.get(targetURL, {
+        headers: reqHeaders,
+        responseType: 'text',
+        timeout: 15000,
+        maxRedirects: 10,
+        validateStatus: () => true,
+      });
+
+      if (response.status >= 400) {
+        res.writeHead(response.status, { 'Content-Type': 'text/plain' });
+        res.end(`Upstream error: ${response.status}`);
+        return;
+      }
+
+      let playlist = response.data;
+
+      // Rewrite all non-comment lines (segment URLs) to go through proxy
+      playlist = playlist.replace(/^(?!#)(\S+)$/gm, (match) => {
+        const trimmed = match.trim();
+        if (!trimmed || trimmed.startsWith('#')) return match;
+
+        let segURL;
+        if (/^https?:\/\//i.test(trimmed)) {
+          segURL = trimmed;
+        } else {
+          try { segURL = new URL(trimmed, targetURL).href; } catch { return match; }
+        }
+
+        return `/proxy?url=${encodeURIComponent(segURL)}&referer=${encodeURIComponent(referer)}`;
+      });
+
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.apple.mpegurl',
+        'Cache-Control': 'no-cache, no-store',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(playlist);
+      return;
+    }
+
+    // ── Video/Binary: Stream with Axios ──
+    const response = await axios({
+      method: 'GET',
+      url: targetURL,
+      headers: reqHeaders,
+      responseType: 'stream',
+      timeout: 0, // No timeout for video streaming
+      maxRedirects: 10,
+      validateStatus: () => true,
+      decompress: false, // Don't decompress video data
+    });
+
+    console.log(`  Status: ${response.status} | Content-Type: ${response.headers['content-type'] || 'unknown'}`);
+
+    // ── Build response headers ──
+    const resHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Range',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
+      'Cache-Control': 'no-cache',
+    };
+
+    // Forward important headers
+    const forwardHeaders = [
+      'content-type', 'content-length', 'content-range',
+      'accept-ranges', 'content-disposition',
+    ];
+
+    for (const h of forwardHeaders) {
+      if (response.headers[h]) {
+        resHeaders[h] = response.headers[h];
+      }
+    }
+
+    // Default content-type if missing
+    if (!resHeaders['content-type']) {
+      if (/\.mp4/i.test(targetURL)) resHeaders['content-type'] = 'video/mp4';
+      else if (/\.webm/i.test(targetURL)) resHeaders['content-type'] = 'video/webm';
+      else if (/\.ts/i.test(targetURL)) resHeaders['content-type'] = 'video/mp2t';
+      else resHeaders['content-type'] = 'application/octet-stream';
+    }
+
+    // ── Send response status + headers ──
+    const statusCode = response.status === 206 ? 206 : 200;
+    res.writeHead(statusCode, resHeaders);
+
+    // ── Pipe the stream ──
+    response.data.pipe(res);
+
+    // ── Handle client disconnect ──
+    req.on('close', () => {
+      console.log('  [PROXY] Client disconnected');
+      if (response.data && typeof response.data.destroy === 'function') {
+        response.data.destroy();
+      }
+    });
+
+    // ── Handle upstream errors ──
+    response.data.on('error', (err) => {
+      console.error(`  [PROXY] Stream error: ${err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(502, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Stream error: ' + err.message }));
+      } else {
+        res.end();
+      }
+    });
+
+  } catch (err) {
+    console.error(`  [PROXY] ✗ Error: ${err.message}`);
+
+    if (!res.headersSent) {
+      const statusCode = err.response?.status || 502;
+      res.writeHead(statusCode, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(JSON.stringify({
+        error: err.message,
+        status: statusCode,
+        url: targetURL,
+      }));
+    } else {
+      res.end();
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════
+// HTTP SERVER — ALL ROUTES
+// ═══════════════════════════════════════════════
 const server = http.createServer(async (req, res) => {
   const parsed = new URL(req.url, `http://localhost:${PORT}`);
 
-  // CORS
+  // ── Global CORS ──
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Range, Content-Length, Accept-Ranges');
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -1060,6 +1079,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ══════════════════════════════════════
+  // ██  /proxy — VIDEO STREAMING ROUTE ██
+  // ══════════════════════════════════════
+  if (parsed.pathname === '/proxy') {
+    return handleProxy(req, res);
+  }
+
   // ── POST /extract (Web UI) ──
   // ── POST /api/extract (Android API) ──
   if ((parsed.pathname === '/extract' || parsed.pathname === '/api/extract') && req.method === 'POST') {
@@ -1068,8 +1094,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const { url, referer } = JSON.parse(body);
-        if (!url) throw new Error('Missing url parameter');
-
+        if (!url) throw new Error('Missing url');
         const result = await extractPipeline(url, referer || '');
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, ...result }));
@@ -1082,13 +1107,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ── GET /api/extract?url=...&referer=... (Simple GET API) ──
+  // ── GET /api/extract?url=... (Simple GET API) ──
   if (parsed.pathname === '/api/extract' && req.method === 'GET') {
     const url = parsed.searchParams.get('url');
     const referer = parsed.searchParams.get('referer') || '';
     if (!url) {
       res.writeHead(400, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: false, error: 'Missing url parameter' }));
+      res.end(JSON.stringify({ ok: false, error: 'Missing url' }));
       return;
     }
     try {
@@ -1102,84 +1127,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ── GET /api/players — List supported players ──
+  // ── GET /api/players ──
   if (parsed.pathname === '/api/players') {
-    const players = Object.entries(PLAYER_HANDLERS).map(([name, h]) => ({
+    const players = Object.keys(PLAYER_HANDLERS).map(name => ({
       name,
-      patterns: h.match.toString(),
+      example: `Use /api/extract?url=https://${name}.com/embed/xxx`
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ players }));
+    res.end(JSON.stringify({ count: players.length, players }));
     return;
   }
 
-  // ── GET /proxy?url=&referer= — Stream proxy ──
-  if (parsed.pathname === '/proxy') {
-    const targetURL = parsed.searchParams.get('url');
-    const referer = parsed.searchParams.get('referer') || '';
-
-    if (!targetURL) { res.writeHead(400); res.end('Missing url'); return; }
-
-    try {
-      const target = new URL(targetURL);
-      const client = target.protocol === 'https:' ? https : http;
-
-      client.get(targetURL, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Referer': referer || target.origin + '/',
-          'Origin': referer ? new URL(referer).origin : target.origin,
-          'Accept': '*/*',
-        },
-        rejectUnauthorized: false,
-      }, (proxyRes) => {
-        if ([301,302,303,307,308].includes(proxyRes.statusCode) && proxyRes.headers.location) {
-          const newURL = new URL(proxyRes.headers.location, targetURL).href;
-          res.writeHead(302, {
-            'Location': `/proxy?url=${encodeURIComponent(newURL)}&referer=${encodeURIComponent(referer)}`
-          });
-          res.end();
-          return;
-        }
-
-        // Rewrite m3u8 segment URLs
-        if (/\.m3u8/i.test(targetURL) || (proxyRes.headers['content-type'] || '').includes('mpegurl')) {
-          let body = '';
-          proxyRes.on('data', c => body += c);
-          proxyRes.on('end', () => {
-            const rewritten = body.replace(
-              /^(?!#)(\S+)$/gm,
-              (match) => {
-                const trimmed = match.trim();
-                if (!trimmed || trimmed.startsWith('#')) return match;
-                const segURL = /^https?:\/\//i.test(trimmed)
-                  ? trimmed
-                  : new URL(trimmed, targetURL).href;
-                return `/proxy?url=${encodeURIComponent(segURL)}&referer=${encodeURIComponent(targetURL)}`;
-              }
-            );
-            res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' });
-            res.end(rewritten);
-          });
-          return;
-        }
-
-        const headers = {
-          'Content-Type': proxyRes.headers['content-type'] || 'application/octet-stream',
-        };
-        if (proxyRes.headers['content-length']) headers['Content-Length'] = proxyRes.headers['content-length'];
-        if (proxyRes.headers['content-range']) headers['Content-Range'] = proxyRes.headers['content-range'];
-        if (proxyRes.headers['accept-ranges']) headers['Accept-Ranges'] = proxyRes.headers['accept-ranges'];
-
-        res.writeHead(proxyRes.statusCode || 200, headers);
-        proxyRes.pipe(res);
-
-      }).on('error', e => {
-        res.writeHead(502); res.end(e.message);
-      });
-    } catch (e) {
-      res.writeHead(400); res.end(e.message);
-    }
+  // ── GET /health (Koyeb health check) ──
+  if (parsed.pathname === '/health' || parsed.pathname === '/healthz') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: 'ok',
+      uptime: process.uptime(),
+      players: Object.keys(PLAYER_HANDLERS).length,
+      port: PORT,
+    }));
     return;
   }
 
@@ -1197,21 +1164,46 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  res.writeHead(404); res.end('Not found');
+  // ── 404 ──
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not found', routes: [
+    'GET  /',
+    'POST /api/extract',
+    'GET  /api/extract?url=...',
+    'GET  /proxy?url=...&referer=...',
+    'GET  /api/players',
+    'GET  /health',
+  ]}));
 });
 
-server.listen(PORT, () => {
+// ── Prevent server crash on unhandled errors ──
+server.on('error', (err) => {
+  console.error('[SERVER ERROR]', err.message);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT]', err.message);
+});
+
+process.on('unhandledRejection', (err) => {
+  console.error('[UNHANDLED REJECTION]', err?.message || err);
+});
+
+server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('══════════════════════════════════════════════════');
-  console.log(`  🎬  Nexo Extractor — port ${PORT}`);
+  console.log(`  🎬  Video Extractor v2.1 — Port ${PORT}`);
   console.log(`  📡  http://localhost:${PORT}`);
-  console.log(`  🔌  API: POST /api/extract`);
-  console.log(`  🔌  API: GET  /api/extract?url=...`);
-  console.log(`  📋  Players: GET /api/players`);
-  console.log('══════════════════════════════════════════════════');
+  console.log('');
+  console.log('  Routes:');
+  console.log(`    POST /api/extract        — Extract video links`);
+  console.log(`    GET  /api/extract?url=... — Extract (GET)`);
+  console.log(`    GET  /proxy?url=...       — Stream/proxy video`);
+  console.log(`    GET  /api/players         — List players`);
+  console.log(`    GET  /health              — Health check`);
   console.log('');
   console.log('  Supported players:');
   Object.keys(PLAYER_HANDLERS).forEach(p => console.log(`    ✓ ${p}`));
+  console.log('══════════════════════════════════════════════════');
   console.log('');
-
 });
