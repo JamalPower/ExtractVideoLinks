@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Video Link Extractor v2</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Tahoma,sans-serif;background:#08091a;color:#e2e8f0;min-height:100vh}
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-thumb{background:#2d3168;border-radius:10px}
+
+    .topbar{
+      background:linear-gradient(135deg,#0f1129,#1a0a30);
+      border-bottom:1px solid #2a1060;padding:14px 24px;
+      display:flex;align-items:center;justify-content:space-between;
+      flex-wrap:wrap;gap:10px;position:sticky;top:0;z-index:100;
+    }
+    .logo{
+      font-size:1.4rem;font-weight:800;
+      background:linear-gradient(135deg,#f97316,#ef4444,#8b5cf6);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+    }
+    .topbar .acts{display:flex;gap:8px;flex-wrap:wrap}
+
+    .container{max-width:1100px;margin:0 auto;padding:20px}
+
+    .hero{text-align:center;padding:30px 20px 10px}
+    .hero h1{
+      font-size:2rem;
+      background:linear-gradient(135deg,#f97316,#ef4444,#a855f7);
+      -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+      margin-bottom:6px;
+    }
+    .hero p{color:#64748b;font-size:.88rem;max-width:600px;margin:0 auto;line-height:1.6}
+
+    /* Players Supported */
+    .players-bar{
+      display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
+      margin:16px 0;padding:14px;
+      background:#0d0f22;border:1px solid #1e1648;border-radius:12px;
+    }
+    .player-tag{
+      padding:4px 10px;border-radius:8px;font-size:.68rem;
+      font-weight:600;background:rgba(139,92,246,.08);
+      color:#a78bfa;border:1px solid rgba(139,92,246,.15);
+    }
+
+    .btn{
+      padding:10px 20px;border:none;border-radius:10px;font-size:.85rem;
+      font-weight:700;cursor:pointer;color:#fff;display:inline-flex;
+      align-items:center;gap:6px;white-space:nowrap;font-family:inherit;
+      transition:all .15s;
+    }
+    .btn:active{transform:scale(.96)}
+    .btn:disabled{opacity:.4;cursor:not-allowed}
+    .btn-primary{background:linear-gradient(135deg,#ea580c,#dc2626);box-shadow:0 4px 20px rgba(234,88,12,.3)}
+    .btn-ghost{background:rgba(139,92,246,.1);color:#a78bfa;border:1px solid rgba(139,92,246,.2)}
+    .btn-ghost:hover{background:rgba(139,92,246,.2)}
+    .btn-sm{padding:7px 14px;font-size:.78rem}
+    .btn-green{background:linear-gradient(135deg,#059669,#10b981)}
+    .btn-blue{background:linear-gradient(135deg,#2563eb,#3b82f6)}
+    .btn-purple{background:linear-gradient(135deg,#7c3aed,#a855f7)}
+    .btn-copy{background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.2)}
+    .btn-copy.copied{background:rgba(74,222,128,.15);color:#4ade80;border-color:rgba(74,222,128,.3)}
+
+    .panel{
+      background:linear-gradient(135deg,#12142e,#1a0a30);
+      border:1px solid #2a1060;border-radius:16px;
+      padding:24px;margin-bottom:22px;
+    }
+    .panel h2{font-size:1rem;color:#fb923c;margin-bottom:14px}
+
+    .input-group{display:flex;gap:10px;flex-wrap:wrap}
+    .input-group input{
+      flex:1;min-width:220px;padding:13px 16px;border-radius:10px;
+      border:1px solid #2a1060;background:#08091a;color:#e2e8f0;
+      font-size:.9rem;outline:none;font-family:inherit;
+    }
+    .input-group input:focus{border-color:#ea580c}
+
+    .log{
+      background:#050714;border:1px solid #1e1648;border-radius:10px;
+      padding:12px 16px;margin-top:14px;max-height:200px;overflow-y:auto;
+      font-family:'Courier New',monospace;font-size:.73rem;line-height:1.9;
+    }
+    .l-i{color:#818cf8}.l-s{color:#4ade80}.l-w{color:#fbbf24}.l-e{color:#fb7185}
+
+    .progress{width:100%;height:5px;background:#1e1648;border-radius:4px;margin-top:14px;overflow:hidden}
+    .progress .bar{height:100%;background:linear-gradient(90deg,#ea580c,#ef4444);border-radius:4px;transition:width .3s;width:0}
+
+    .info-grid{
+      display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
+      gap:10px;margin-bottom:22px;
+    }
+    .info-box{
+      background:#12142e;border:1px solid #1e1648;border-radius:12px;
+      padding:14px;text-align:center;
+    }
+    .info-box .val{font-size:1rem;font-weight:700;color:#fb923c}
+    .info-box .lbl{font-size:.72rem;color:#64748b;margin-top:2px}
+
+    .sources{display:flex;flex-direction:column;gap:12px}
+    .source-card{
+      background:#12142e;border:1px solid #1e1648;border-radius:14px;
+      padding:18px 20px;transition:border-color .2s;
+    }
+    .source-card:hover{border-color:#ea580c}
+    .top-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+
+    .qbadge{
+      padding:5px 14px;border-radius:8px;font-size:.8rem;font-weight:800;
+      background:linear-gradient(135deg,#ea580c,#dc2626);color:#fff;
+      min-width:60px;text-align:center;
+    }
+    .qbadge.hls{background:linear-gradient(135deg,#7c3aed,#a855f7)}
+    .qbadge.master{background:linear-gradient(135deg,#0891b2,#06b6d4)}
+    .qbadge.unknown{background:#334155}
+
+    .ttag{padding:3px 10px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,146,60,.1);color:#fb923c;border:1px solid rgba(251,146,60,.2)}
+    .ptag{padding:3px 10px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(139,92,246,.1);color:#a78bfa;border:1px solid rgba(139,92,246,.2)}
+    .res-tag{font-size:.72rem;color:#94a3b8}
+
+    .url-box{
+      flex:1;min-width:200px;padding:10px 14px;border-radius:8px;
+      background:#08091a;border:1px solid #1e1648;
+      font-family:'Courier New',monospace;font-size:.74rem;color:#94a3b8;
+      word-break:break-all;line-height:1.5;max-height:60px;overflow-y:auto;
+      user-select:all;margin-bottom:10px;
+    }
+
+    .actions{display:flex;gap:6px;flex-wrap:wrap}
+
+    .player-section{
+      margin-top:22px;background:#12142e;border:1px solid #1e1648;
+      border-radius:14px;overflow:hidden;
+    }
+    .player-header{padding:14px 20px;border-bottom:1px solid #1e1648;display:flex;align-items:center;justify-content:space-between}
+    .player-header h3{font-size:.95rem;color:#fb923c}
+    .player-wrap{position:relative;width:100%;background:#000}
+    .player-wrap video{width:100%;max-height:500px;display:block}
+    .player-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#475569;font-size:.9rem;text-align:center;pointer-events:none}
+
+    .history-item{
+      display:flex;align-items:center;gap:10px;padding:10px 14px;
+      background:#0d0f22;border-radius:8px;margin-bottom:6px;
+      font-size:.82rem;cursor:pointer;transition:background .2s;
+    }
+    .history-item:hover{background:#12142e}
+    .history-item .time{color:#475569;font-size:.72rem;min-width:70px}
+    .history-item .hurl{color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .history-item .hcount{color:#fb923c;font-weight:700}
+
+    .empty{text-align:center;padding:40px 20px;color:#334155}
+    .empty .icon{font-size:3rem;margin-bottom:10px}
+    .hidden{display:none!important}
+
+    @media(max-width:600px){
+      .hero h1{font-size:1.5rem}
+      .panel{padding:16px}
+      .container{padding:14px}
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">🎬 Nexo Extractor</div>
+  <div class="acts">
+    <button class="btn btn-ghost btn-sm" onclick="toggleHistory()">📜 History</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportAll()">📥 Export</button>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="hero">
+    <h1>Universal Video Link Extractor</h1>
+    <p>Paste any player/iframe URL → Get all video qualities & direct download links. Supports 20+ players including VK, OK.ru, MegaMax, and more.</p>
+  </div>
+
+  <div class="players-bar">
+    <span class="player-tag">VK</span>
+    <span class="player-tag">OK.ru</span>
+    <span class="player-tag">MegaMax</span>
+    <span class="player-tag">Sibnet</span>
+    <span class="player-tag">Myvi</span>
+    <span class="player-tag">StreamWish</span>
+    <span class="player-tag">Mp4Upload</span>
+    <span class="player-tag">Uqload</span>
+    <span class="player-tag">DoodStream</span>
+    <span class="player-tag">StreamTape</span>
+    <span class="player-tag">MixDrop</span>
+    <span class="player-tag">FileMoon</span>
+    <span class="player-tag">VidBom</span>
+    <span class="player-tag">Vidmoly</span>
+    <span class="player-tag">GoVideo</span>
+    <span class="player-tag">YourUpload</span>
+    <span class="player-tag">SendVid</span>
+    <span class="player-tag">Dailymotion</span>
+    <span class="player-tag">VidHide</span>
+    <span class="player-tag">JWPlayer</span>
+    <span class="player-tag">+ Any HTML5</span>
+  </div>
+
+  <div class="panel">
+    <h2>🔗 Player / Iframe URL</h2>
+    <div class="input-group">
+      <input type="url" id="urlInput" placeholder="https://player.example.com/embed/xxxxx" />
+      <input type="url" id="refInput" placeholder="Referer (optional)" style="max-width:260px" />
+      <button class="btn btn-primary" id="goBtn" onclick="extract()">🚀 Extract</button>
+    </div>
+    <div class="progress"><div class="bar" id="pbar"></div></div>
+    <div class="log" id="logBox"></div>
+  </div>
+
+  <div class="info-grid hidden" id="pageInfo">
+    <div class="info-box"><div class="val" id="piPlayer">—</div><div class="lbl">Player</div></div>
+    <div class="info-box"><div class="val" id="piTitle">—</div><div class="lbl">Title</div></div>
+    <div class="info-box"><div class="val" id="piSize">—</div><div class="lbl">Page Size</div></div>
+    <div class="info-box"><div class="val" id="piPacked">—</div><div class="lbl">Unpacked Scripts</div></div>
+    <div class="info-box"><div class="val" id="piIframes">—</div><div class="lbl">Iframes</div></div>
+    <div class="info-box"><div class="val" id="piSources">0</div><div class="lbl">Sources Found</div></div>
+  </div>
+
+  <div class="hidden" id="resSection">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <h2 style="font-size:1.1rem">📦 Extracted Sources</h2>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="copyAllURLs()">📋 Copy All</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyForAndroid()">📱 Android Format</button>
+      </div>
+    </div>
+    <div class="sources" id="sourcesList"></div>
+
+    <div class="player-section" id="playerSection">
+      <div class="player-header">
+        <h3>▶️ Preview</h3>
+        <span id="playerLabel" style="font-size:.78rem;color:#64748b">Select a source</span>
+      </div>
+      <div class="player-wrap">
+        <video id="videoPlayer" controls preload="metadata"></video>
+        <div class="player-msg" id="playerMsg">Click ▶️ to preview</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="historyPanel">
+    <h2>📜 History</h2>
+    <div id="historyList"></div>
+  </div>
+
+</div>
+
+<script>
+let allSources = [];
+let history = JSON.parse(localStorage.getItem('vex2_history') || '[]');
+let hlsInstance = null;
+
+function log(msg, t='i') {
+  const box = document.getElementById('logBox');
+  box.innerHTML += `<div class="l-${t}">[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+function setProg(p) { document.getElementById('pbar').style.width = p + '%'; }
+
+async function extract() {
+  const url = document.getElementById('urlInput').value.trim();
+  const referer = document.getElementById('refInput').value.trim();
+  if (!url) { log('Enter a URL', 'e'); return; }
+
+  const btn = document.getElementById('goBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Extracting...';
+  document.getElementById('logBox').innerHTML = '';
+  document.getElementById('pageInfo').classList.add('hidden');
+  document.getElementById('resSection').classList.add('hidden');
+  allSources = [];
+  setProg(10);
+
+  try {
+    log(`🔗 ${url}`);
+    if (referer) log(`📎 Referer: ${referer}`);
+    log('📡 Sending to server...');
+    setProg(30);
+
+    const resp = await fetch('/api/extract', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, referer }),
+    });
+
+    const data = await resp.json();
+    setProg(80);
+
+    if (!data.ok) {
+      log(`❌ ${data.error}`, 'e');
+      setProg(0);
+      return;
+    }
+
+    const { pageInfo, sources } = data;
+    allSources = sources;
+
+    log(`📄 Player: ${pageInfo.detectedPlayer}`, 's');
+    log(`📄 Title: "${pageInfo.title || 'Untitled'}"`, 'i');
+    log(`🔧 Unpacked: ${pageInfo.packedScripts} script(s)`, pageInfo.packedScripts > 0 ? 's' : 'i');
+    log(`🖼️ Iframes: ${pageInfo.iframesFound}`, 'i');
+    log(`🎬 Sources: ${sources.length}`, sources.length > 0 ? 's' : 'w');
+
+    document.getElementById('pageInfo').classList.remove('hidden');
+    document.getElementById('piPlayer').textContent = pageInfo.detectedPlayer;
+    document.getElementById('piTitle').textContent = (pageInfo.title || '—').substring(0, 40);
+    document.getElementById('piSize').textContent = (pageInfo.pageSize / 1024).toFixed(1) + ' KB';
+    document.getElementById('piPacked').textContent = pageInfo.packedScripts;
+    document.getElementById('piIframes').textContent = pageInfo.iframesFound;
+    document.getElementById('piSources').textContent = sources.length;
+
+    if (sources.length > 0) {
+      document.getElementById('resSection').classList.remove('hidden');
+      renderSources();
+      addHistory(url, pageInfo.detectedPlayer, sources.length);
+      log('✅ Done!', 's');
+    } else {
+      log('⚠️ No video sources found.', 'w');
+      log('Tips:', 'w');
+      log('  • Use the iframe/embed URL, not the main page', 'w');
+      log('  • Add the episode page as Referer', 'w');
+    }
+
+    setProg(100);
+  } catch (err) {
+    log(`💥 ${err.message}`, 'e');
+    log('Is server.js running? → node server.js', 'e');
+    setProg(0);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🚀 Extract';
+  }
+}
+
+function renderSources() {
+  document.getElementById('sourcesList').innerHTML = allSources.map((src, i) => {
+    const isHLS = /m3u8/i.test(src.url);
+    const isMaster = src.isMaster;
+    const badgeClass = isMaster ? 'master' : isHLS ? 'hls' : (/unknown|default/i.test(src.quality) ? 'unknown' : '');
+    const shortType = (src.type || '').replace('application/x-mpegURL', 'HLS').replace('video/', '').toUpperCase();
+
+    return `
+      <div class="source-card">
+        <div class="top-row">
+          <div class="qbadge ${badgeClass}">${esc(src.quality)}</div>
+          <span class="ttag">${esc(shortType)}</span>
+          ${src.player ? `<span class="ptag">🎮 ${esc(src.player)}</span>` : ''}
+          ${src.resolution ? `<span class="res-tag">📐 ${esc(src.resolution)}</span>` : ''}
+          ${src.bandwidth ? `<span class="res-tag">📊 ${Math.round(src.bandwidth/1000)} kbps</span>` : ''}
+        </div>
+        <div class="url-box" id="url-${i}">${esc(src.url)}</div>
+        <div class="actions">
+          <button class="btn btn-copy btn-sm" onclick="copyURL(${i},this)">📋 Copy</button>
+          ${!src.needsToken ? `<button class="btn btn-green btn-sm" onclick="playSource(${i})">▶️ Play</button>` : ''}
+          ${!isHLS && !src.needsToken ? `<button class="btn btn-blue btn-sm" onclick="downloadSource(${i})">⬇️ Download</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="window.open('${esc(src.url)}','_blank')">🔗 Open</button>
+          ${isHLS ? `<button class="btn btn-purple btn-sm" onclick="openProxy(${i})">📡 Proxy</button>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function copyURL(i, btn) {
+  navigator.clipboard.writeText(allSources[i].url).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = '✅ Copied!';
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '📋 Copy'; }, 2000);
+  });
+}
+
+function copyAllURLs() {
+  navigator.clipboard.writeText(allSources.map(s => s.url).join('\n'));
+  log('📋 All URLs copied!', 's');
+}
+
+function copyForAndroid() {
+  const data = JSON.stringify(allSources.map(s => ({
+    url: s.url,
+    quality: s.quality,
+    type: s.type,
+    player: s.player,
+  })), null, 2);
+  navigator.clipboard.writeText(data);
+  log('📱 Android-format JSON copied!', 's');
+}
+
+function downloadSource(i) {
+  const src = allSources[i];
+  const ref = document.getElementById('urlInput').value;
+  const a = document.createElement('a');
+  a.href = `/proxy?url=${encodeURIComponent(src.url)}&referer=${encodeURIComponent(ref)}`;
+  a.download = `video-${src.quality}.${src.type.split('/').pop() || 'mp4'}`;
+  a.click();
+}
+
+function openProxy(i) {
+  const ref = document.getElementById('urlInput').value;
+  window.open(`/proxy?url=${encodeURIComponent(allSources[i].url)}&referer=${encodeURIComponent(ref)}`, '_blank');
+}
+
+function playSource(i) {
+  const src = allSources[i];
+  const video = document.getElementById('videoPlayer');
+  const msg = document.getElementById('playerMsg');
+  const label = document.getElementById('playerLabel');
+  const ref = document.getElementById('urlInput').value;
+
+  msg.style.display = 'none';
+  label.textContent = `${src.quality} — ${src.player || 'Generic'} — ${src.type}`;
+
+  if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+
+  const proxyURL = `/proxy?url=${encodeURIComponent(src.url)}&referer=${encodeURIComponent(ref)}`;
+
+  if (/m3u8/i.test(src.url)) {
+    if (Hls.isSupported()) {
+      hlsInstance = new Hls();
+      hlsInstance.loadSource(proxyURL);
+      hlsInstance.attachMedia(video);
+      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
+      hlsInstance.on(Hls.Events.ERROR, (_, d) => log(`HLS: ${d.details}`, 'w'));
+    } else if (video.canPlayType('application/vnd.apple.mpegURL')) {
+      video.src = proxyURL;
+      video.play().catch(() => {});
+    }
+  } else {
+    video.src = proxyURL;
+    video.play().catch(() => {});
+  }
+
+  document.getElementById('playerSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  log(`▶️ Playing: ${src.quality}`, 's');
+}
+
+function addHistory(url, player, count) {
+  history.unshift({ url, player, count, time: new Date().toLocaleString() });
+  if (history.length > 50) history = history.slice(0, 50);
+  localStorage.setItem('vex2_history', JSON.stringify(history));
+}
+
+function toggleHistory() {
+  const p = document.getElementById('historyPanel');
+  p.classList.toggle('hidden');
+  if (!p.classList.contains('hidden')) {
+    document.getElementById('historyList').innerHTML = history.length
+      ? history.map(h => `
+          <div class="history-item" onclick="document.getElementById('urlInput').value='${esc(h.url)}';document.getElementById('historyPanel').classList.add('hidden')">
+            <span class="time">${h.time}</span>
+            <span class="hurl">${esc(h.url)}</span>
+            <span class="player-tag" style="font-size:.65rem">${esc(h.player || '?')}</span>
+            <span class="hcount">${h.count}</span>
+          </div>`).join('')
+      : '<div class="empty"><div class="icon">📜</div><p>No history</p></div>';
+  }
+}
+
+function exportAll() {
+  if (!allSources.length) { log('Nothing to export', 'w'); return; }
+  const blob = new Blob([JSON.stringify({
+    url: document.getElementById('urlInput').value,
+    extractedAt: new Date().toISOString(),
+    sources: allSources
+  }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `video-links-${Date.now()}.json`;
+  a.click();
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}
+
+document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') extract(); });
+</script>
+
+</body>
+</html>
