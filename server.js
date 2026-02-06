@@ -10,7 +10,7 @@ const path = require('path');
 const { URL } = require('url');
 const zlib = require('zlib');
 
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 8000;
 
 // ══════════════════════════════════════
 // ROBUST FETCHER
@@ -1213,4 +1213,5 @@ server.listen(PORT, () => {
   console.log('  Supported players:');
   Object.keys(PLAYER_HANDLERS).forEach(p => console.log(`    ✓ ${p}`));
   console.log('');
+
 });
