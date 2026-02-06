@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  <title>Nexo Link Extractor</title>
+  <title>Nexo Video Link Extractor</title>
   <link rel="icon" type="image/png" href="https://image2url.com/r2/default/images/1770395489448-2d284d1c-d4a2-42b1-8b03-0b5984c9589e.png">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
   <style>
@@ -23,10 +23,8 @@
       background:linear-gradient(135deg,#f97316,#ef4444,#8b5cf6);
       -webkit-background-clip:text;-webkit-text-fill-color:transparent;
     }
-    .topbar .acts{display:flex;gap:8px;flex-wrap:wrap}
-
+    .acts{display:flex;gap:8px;flex-wrap:wrap}
     .container{max-width:1100px;margin:0 auto;padding:20px}
-
     .hero{text-align:center;padding:30px 20px 10px}
     .hero h1{
       font-size:2rem;
@@ -35,8 +33,6 @@
       margin-bottom:6px;
     }
     .hero p{color:#64748b;font-size:.88rem;max-width:600px;margin:0 auto;line-height:1.6}
-
-    /* Players Supported */
     .players-bar{
       display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
       margin:16px 0;padding:14px;
@@ -47,7 +43,6 @@
       font-weight:600;background:rgba(139,92,246,.08);
       color:#a78bfa;border:1px solid rgba(139,92,246,.15);
     }
-
     .btn{
       padding:10px 20px;border:none;border-radius:10px;font-size:.85rem;
       font-weight:700;cursor:pointer;color:#fff;display:inline-flex;
@@ -65,14 +60,12 @@
     .btn-purple{background:linear-gradient(135deg,#7c3aed,#a855f7)}
     .btn-copy{background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.2)}
     .btn-copy.copied{background:rgba(74,222,128,.15);color:#4ade80;border-color:rgba(74,222,128,.3)}
-
     .panel{
       background:linear-gradient(135deg,#12142e,#1a0a30);
       border:1px solid #2a1060;border-radius:16px;
       padding:24px;margin-bottom:22px;
     }
     .panel h2{font-size:1rem;color:#fb923c;margin-bottom:14px}
-
     .input-group{display:flex;gap:10px;flex-wrap:wrap}
     .input-group input{
       flex:1;min-width:220px;padding:13px 16px;border-radius:10px;
@@ -80,17 +73,14 @@
       font-size:.9rem;outline:none;font-family:inherit;
     }
     .input-group input:focus{border-color:#ea580c}
-
     .log{
       background:#050714;border:1px solid #1e1648;border-radius:10px;
       padding:12px 16px;margin-top:14px;max-height:200px;overflow-y:auto;
       font-family:'Courier New',monospace;font-size:.73rem;line-height:1.9;
     }
     .l-i{color:#818cf8}.l-s{color:#4ade80}.l-w{color:#fbbf24}.l-e{color:#fb7185}
-
     .progress{width:100%;height:5px;background:#1e1648;border-radius:4px;margin-top:14px;overflow:hidden}
     .progress .bar{height:100%;background:linear-gradient(90deg,#ea580c,#ef4444);border-radius:4px;transition:width .3s;width:0}
-
     .info-grid{
       display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));
       gap:10px;margin-bottom:22px;
@@ -101,7 +91,6 @@
     }
     .info-box .val{font-size:1rem;font-weight:700;color:#fb923c}
     .info-box .lbl{font-size:.72rem;color:#64748b;margin-top:2px}
-
     .sources{display:flex;flex-direction:column;gap:12px}
     .source-card{
       background:#12142e;border:1px solid #1e1648;border-radius:14px;
@@ -109,7 +98,6 @@
     }
     .source-card:hover{border-color:#ea580c}
     .top-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-
     .qbadge{
       padding:5px 14px;border-radius:8px;font-size:.8rem;font-weight:800;
       background:linear-gradient(135deg,#ea580c,#dc2626);color:#fff;
@@ -118,21 +106,17 @@
     .qbadge.hls{background:linear-gradient(135deg,#7c3aed,#a855f7)}
     .qbadge.master{background:linear-gradient(135deg,#0891b2,#06b6d4)}
     .qbadge.unknown{background:#334155}
-
     .ttag{padding:3px 10px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(251,146,60,.1);color:#fb923c;border:1px solid rgba(251,146,60,.2)}
     .ptag{padding:3px 10px;border-radius:6px;font-size:.7rem;font-weight:600;background:rgba(139,92,246,.1);color:#a78bfa;border:1px solid rgba(139,92,246,.2)}
     .res-tag{font-size:.72rem;color:#94a3b8}
-
     .url-box{
-      flex:1;min-width:200px;padding:10px 14px;border-radius:8px;
+      padding:10px 14px;border-radius:8px;
       background:#08091a;border:1px solid #1e1648;
       font-family:'Courier New',monospace;font-size:.74rem;color:#94a3b8;
       word-break:break-all;line-height:1.5;max-height:60px;overflow-y:auto;
       user-select:all;margin-bottom:10px;
     }
-
     .actions{display:flex;gap:6px;flex-wrap:wrap}
-
     .player-section{
       margin-top:22px;background:#12142e;border:1px solid #1e1648;
       border-radius:14px;overflow:hidden;
@@ -141,33 +125,15 @@
     .player-header h3{font-size:.95rem;color:#fb923c}
     .player-wrap{position:relative;width:100%;background:#000}
     .player-wrap video{width:100%;max-height:500px;display:block}
-    .player-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#475569;font-size:.9rem;text-align:center;pointer-events:none}
-
-    .history-item{
-      display:flex;align-items:center;gap:10px;padding:10px 14px;
-      background:#0d0f22;border-radius:8px;margin-bottom:6px;
-      font-size:.82rem;cursor:pointer;transition:background .2s;
-    }
-    .history-item:hover{background:#12142e}
-    .history-item .time{color:#475569;font-size:.72rem;min-width:70px}
-    .history-item .hurl{color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .history-item .hcount{color:#fb923c;font-weight:700}
-
-    .empty{text-align:center;padding:40px 20px;color:#334155}
-    .empty .icon{font-size:3rem;margin-bottom:10px}
+    .player-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#475569;font-size:.9rem;pointer-events:none}
     .hidden{display:none!important}
-
-    @media(max-width:600px){
-      .hero h1{font-size:1.5rem}
-      .panel{padding:16px}
-      .container{padding:14px}
-    }
+    @media(max-width:600px){.hero h1{font-size:1.5rem}.panel{padding:16px}.container{padding:14px}}
   </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div class="logo">🎬 Nexo Extractor</div>
+  <div class="logo">🎬 Nexo Video Extractor</div>
   <div class="acts">
     <button class="btn btn-ghost btn-sm" onclick="toggleHistory()">📜 History</button>
     <button class="btn btn-ghost btn-sm" onclick="exportAll()">📥 Export</button>
@@ -177,8 +143,8 @@
 <div class="container">
 
   <div class="hero">
-    <h1>Universal Video Link Extractor By Jamal Dev</h1>
-    <p>Paste any player/iframe URL → Get all video qualities & direct download links. Supports 20+ players including VK, OK.ru, MegaMax, and more.</p>
+    <h1>Universal Video Link Extractor By Jamal Info</h1>
+    <p>Paste any player/iframe URL → Get direct links with proxy streaming</p>
   </div>
 
   <div class="players-bar">
@@ -196,12 +162,10 @@
     <span class="player-tag">FileMoon</span>
     <span class="player-tag">VidBom</span>
     <span class="player-tag">Vidmoly</span>
-    <span class="player-tag">GoVideo</span>
+    <span class="player-tag">Dailymotion</span>
     <span class="player-tag">YourUpload</span>
     <span class="player-tag">SendVid</span>
-    <span class="player-tag">Dailymotion</span>
     <span class="player-tag">VidHide</span>
-    <span class="player-tag">JWPlayer</span>
     <span class="player-tag">+ Any HTML5</span>
   </div>
 
@@ -220,9 +184,9 @@
     <div class="info-box"><div class="val" id="piPlayer">—</div><div class="lbl">Player</div></div>
     <div class="info-box"><div class="val" id="piTitle">—</div><div class="lbl">Title</div></div>
     <div class="info-box"><div class="val" id="piSize">—</div><div class="lbl">Page Size</div></div>
-    <div class="info-box"><div class="val" id="piPacked">—</div><div class="lbl">Unpacked Scripts</div></div>
+    <div class="info-box"><div class="val" id="piPacked">—</div><div class="lbl">Unpacked</div></div>
     <div class="info-box"><div class="val" id="piIframes">—</div><div class="lbl">Iframes</div></div>
-    <div class="info-box"><div class="val" id="piSources">0</div><div class="lbl">Sources Found</div></div>
+    <div class="info-box"><div class="val" id="piSources">0</div><div class="lbl">Sources</div></div>
   </div>
 
   <div class="hidden" id="resSection">
@@ -230,18 +194,17 @@
       <h2 style="font-size:1.1rem">📦 Extracted Sources</h2>
       <div style="display:flex;gap:6px">
         <button class="btn btn-ghost btn-sm" onclick="copyAllURLs()">📋 Copy All</button>
-        <button class="btn btn-ghost btn-sm" onclick="copyForAndroid()">📱 Android Format</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyForAndroid()">📱 Android</button>
       </div>
     </div>
     <div class="sources" id="sourcesList"></div>
-
     <div class="player-section" id="playerSection">
       <div class="player-header">
         <h3>▶️ Preview</h3>
         <span id="playerLabel" style="font-size:.78rem;color:#64748b">Select a source</span>
       </div>
       <div class="player-wrap">
-        <video id="videoPlayer" controls preload="metadata"></video>
+        <video id="videoPlayer" controls preload="metadata" crossorigin="anonymous"></video>
         <div class="player-msg" id="playerMsg">Click ▶️ to preview</div>
       </div>
     </div>
@@ -256,8 +219,11 @@
 
 <script>
 let allSources = [];
-let history = JSON.parse(localStorage.getItem('vex2_history') || '[]');
+let history = JSON.parse(localStorage.getItem('vex21_history') || '[]');
 let hlsInstance = null;
+
+// Get the base URL dynamically (works on localhost AND deployed)
+const BASE = window.location.origin;
 
 function log(msg, t='i') {
   const box = document.getElementById('logBox');
@@ -267,6 +233,11 @@ function log(msg, t='i') {
 
 function setProg(p) { document.getElementById('pbar').style.width = p + '%'; }
 
+// Build proxy URL — works on both localhost and deployed
+function proxyURL(videoURL, referer) {
+  return `${BASE}/proxy?url=${encodeURIComponent(videoURL)}&referer=${encodeURIComponent(referer || '')}`;
+}
+
 async function extract() {
   const url = document.getElementById('urlInput').value.trim();
   const referer = document.getElementById('refInput').value.trim();
@@ -274,7 +245,7 @@ async function extract() {
 
   const btn = document.getElementById('goBtn');
   btn.disabled = true;
-  btn.textContent = '⏳ Extracting...';
+  btn.textContent = '⏳ ...';
   document.getElementById('logBox').innerHTML = '';
   document.getElementById('pageInfo').classList.add('hidden');
   document.getElementById('resSection').classList.add('hidden');
@@ -283,8 +254,6 @@ async function extract() {
 
   try {
     log(`🔗 ${url}`);
-    if (referer) log(`📎 Referer: ${referer}`);
-    log('📡 Sending to server...');
     setProg(30);
 
     const resp = await fetch('/api/extract', {
@@ -296,19 +265,14 @@ async function extract() {
     const data = await resp.json();
     setProg(80);
 
-    if (!data.ok) {
-      log(`❌ ${data.error}`, 'e');
-      setProg(0);
-      return;
-    }
+    if (!data.ok) { log(`❌ ${data.error}`, 'e'); setProg(0); return; }
 
     const { pageInfo, sources } = data;
     allSources = sources;
 
-    log(`📄 Player: ${pageInfo.detectedPlayer}`, 's');
+    log(`🎮 Player: ${pageInfo.detectedPlayer}`, 's');
     log(`📄 Title: "${pageInfo.title || 'Untitled'}"`, 'i');
-    log(`🔧 Unpacked: ${pageInfo.packedScripts} script(s)`, pageInfo.packedScripts > 0 ? 's' : 'i');
-    log(`🖼️ Iframes: ${pageInfo.iframesFound}`, 'i');
+    log(`🔧 Unpacked: ${pageInfo.packedScripts}`, pageInfo.packedScripts > 0 ? 's' : 'i');
     log(`🎬 Sources: ${sources.length}`, sources.length > 0 ? 's' : 'w');
 
     document.getElementById('pageInfo').classList.remove('hidden');
@@ -323,18 +287,14 @@ async function extract() {
       document.getElementById('resSection').classList.remove('hidden');
       renderSources();
       addHistory(url, pageInfo.detectedPlayer, sources.length);
-      log('✅ Done!', 's');
+      log('✅ Done! Use proxy URLs for playback.', 's');
     } else {
-      log('⚠️ No video sources found.', 'w');
-      log('Tips:', 'w');
-      log('  • Use the iframe/embed URL, not the main page', 'w');
-      log('  • Add the episode page as Referer', 'w');
+      log('⚠️ No sources found.', 'w');
     }
 
     setProg(100);
   } catch (err) {
     log(`💥 ${err.message}`, 'e');
-    log('Is server.js running? → node server.js', 'e');
     setProg(0);
   } finally {
     btn.disabled = false;
@@ -343,11 +303,16 @@ async function extract() {
 }
 
 function renderSources() {
+  const ref = document.getElementById('urlInput').value;
+
   document.getElementById('sourcesList').innerHTML = allSources.map((src, i) => {
     const isHLS = /m3u8/i.test(src.url);
     const isMaster = src.isMaster;
     const badgeClass = isMaster ? 'master' : isHLS ? 'hls' : (/unknown|default/i.test(src.quality) ? 'unknown' : '');
     const shortType = (src.type || '').replace('application/x-mpegURL', 'HLS').replace('video/', '').toUpperCase();
+
+    // Build the proxy URL for display
+    const pURL = proxyURL(src.url, ref);
 
     return `
       <div class="source-card">
@@ -358,54 +323,49 @@ function renderSources() {
           ${src.resolution ? `<span class="res-tag">📐 ${esc(src.resolution)}</span>` : ''}
           ${src.bandwidth ? `<span class="res-tag">📊 ${Math.round(src.bandwidth/1000)} kbps</span>` : ''}
         </div>
-        <div class="url-box" id="url-${i}">${esc(src.url)}</div>
+        <div style="font-size:.7rem;color:#475569;margin-bottom:4px">Direct URL:</div>
+        <div class="url-box">${esc(src.url)}</div>
+        <div style="font-size:.7rem;color:#059669;margin-bottom:4px">✅ Proxy URL (use this for playback):</div>
+        <div class="url-box" style="border-color:rgba(5,150,105,.3);color:#4ade80">${esc(pURL)}</div>
         <div class="actions">
-          <button class="btn btn-copy btn-sm" onclick="copyURL(${i},this)">📋 Copy</button>
-          ${!src.needsToken ? `<button class="btn btn-green btn-sm" onclick="playSource(${i})">▶️ Play</button>` : ''}
-          ${!isHLS && !src.needsToken ? `<button class="btn btn-blue btn-sm" onclick="downloadSource(${i})">⬇️ Download</button>` : ''}
-          <button class="btn btn-ghost btn-sm" onclick="window.open('${esc(src.url)}','_blank')">🔗 Open</button>
-          ${isHLS ? `<button class="btn btn-purple btn-sm" onclick="openProxy(${i})">📡 Proxy</button>` : ''}
+          <button class="btn btn-copy btn-sm" onclick="copyText('${esc(src.url)}',this)">📋 Direct</button>
+          <button class="btn btn-copy btn-sm" style="border-color:rgba(74,222,128,.3);color:#4ade80" onclick="copyText('${esc(pURL)}',this)">📋 Proxy</button>
+          <button class="btn btn-green btn-sm" onclick="playSource(${i})">▶️ Play</button>
+          ${!isHLS ? `<button class="btn btn-blue btn-sm" onclick="window.open('${esc(pURL)}','_blank')">⬇️ Download</button>` : ''}
+          <button class="btn btn-ghost btn-sm" onclick="window.open('${esc(src.url)}','_blank')">🔗 Direct</button>
         </div>
       </div>`;
   }).join('');
 }
 
-function copyURL(i, btn) {
-  navigator.clipboard.writeText(allSources[i].url).then(() => {
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const orig = btn.innerHTML;
     btn.classList.add('copied');
     btn.innerHTML = '✅ Copied!';
-    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = '📋 Copy'; }, 2000);
+    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 2000);
   });
 }
 
 function copyAllURLs() {
-  navigator.clipboard.writeText(allSources.map(s => s.url).join('\n'));
-  log('📋 All URLs copied!', 's');
+  const ref = document.getElementById('urlInput').value;
+  const urls = allSources.map(s => proxyURL(s.url, ref)).join('\n');
+  navigator.clipboard.writeText(urls);
+  log('📋 All proxy URLs copied!', 's');
 }
 
 function copyForAndroid() {
+  const ref = document.getElementById('urlInput').value;
   const data = JSON.stringify(allSources.map(s => ({
-    url: s.url,
+    directURL: s.url,
+    proxyURL: proxyURL(s.url, ref),
     quality: s.quality,
     type: s.type,
     player: s.player,
+    resolution: s.resolution || null,
   })), null, 2);
   navigator.clipboard.writeText(data);
-  log('📱 Android-format JSON copied!', 's');
-}
-
-function downloadSource(i) {
-  const src = allSources[i];
-  const ref = document.getElementById('urlInput').value;
-  const a = document.createElement('a');
-  a.href = `/proxy?url=${encodeURIComponent(src.url)}&referer=${encodeURIComponent(ref)}`;
-  a.download = `video-${src.quality}.${src.type.split('/').pop() || 'mp4'}`;
-  a.click();
-}
-
-function openProxy(i) {
-  const ref = document.getElementById('urlInput').value;
-  window.open(`/proxy?url=${encodeURIComponent(allSources[i].url)}&referer=${encodeURIComponent(ref)}`, '_blank');
+  log('📱 Android JSON copied!', 's');
 }
 
 function playSource(i) {
@@ -420,32 +380,32 @@ function playSource(i) {
 
   if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
 
-  const proxyURL = `/proxy?url=${encodeURIComponent(src.url)}&referer=${encodeURIComponent(ref)}`;
+  const pURL = proxyURL(src.url, ref);
 
   if (/m3u8/i.test(src.url)) {
     if (Hls.isSupported()) {
       hlsInstance = new Hls();
-      hlsInstance.loadSource(proxyURL);
+      hlsInstance.loadSource(pURL);
       hlsInstance.attachMedia(video);
       hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
       hlsInstance.on(Hls.Events.ERROR, (_, d) => log(`HLS: ${d.details}`, 'w'));
     } else if (video.canPlayType('application/vnd.apple.mpegURL')) {
-      video.src = proxyURL;
+      video.src = pURL;
       video.play().catch(() => {});
     }
   } else {
-    video.src = proxyURL;
+    video.src = pURL;
     video.play().catch(() => {});
   }
 
   document.getElementById('playerSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  log(`▶️ Playing: ${src.quality}`, 's');
+  log(`▶️ Playing via proxy: ${src.quality}`, 's');
 }
 
 function addHistory(url, player, count) {
   history.unshift({ url, player, count, time: new Date().toLocaleString() });
   if (history.length > 50) history = history.slice(0, 50);
-  localStorage.setItem('vex2_history', JSON.stringify(history));
+  localStorage.setItem('vex21_history', JSON.stringify(history));
 }
 
 function toggleHistory() {
@@ -454,22 +414,27 @@ function toggleHistory() {
   if (!p.classList.contains('hidden')) {
     document.getElementById('historyList').innerHTML = history.length
       ? history.map(h => `
-          <div class="history-item" onclick="document.getElementById('urlInput').value='${esc(h.url)}';document.getElementById('historyPanel').classList.add('hidden')">
-            <span class="time">${h.time}</span>
-            <span class="hurl">${esc(h.url)}</span>
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0d0f22;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:.82rem"
+               onclick="document.getElementById('urlInput').value='${esc(h.url)}';document.getElementById('historyPanel').classList.add('hidden')">
+            <span style="color:#475569;font-size:.72rem;min-width:70px">${h.time}</span>
+            <span style="color:#94a3b8;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.url)}</span>
             <span class="player-tag" style="font-size:.65rem">${esc(h.player || '?')}</span>
-            <span class="hcount">${h.count}</span>
+            <span style="color:#fb923c;font-weight:700">${h.count}</span>
           </div>`).join('')
-      : '<div class="empty"><div class="icon">📜</div><p>No history</p></div>';
+      : '<div style="text-align:center;padding:30px;color:#334155"><p>No history</p></div>';
   }
 }
 
 function exportAll() {
   if (!allSources.length) { log('Nothing to export', 'w'); return; }
+  const ref = document.getElementById('urlInput').value;
   const blob = new Blob([JSON.stringify({
-    url: document.getElementById('urlInput').value,
+    url: ref,
     extractedAt: new Date().toISOString(),
-    sources: allSources
+    sources: allSources.map(s => ({
+      ...s,
+      proxyURL: proxyURL(s.url, ref),
+    }))
   }, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -488,6 +453,4 @@ document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key
 </script>
 
 </body>
-
 </html>
-
